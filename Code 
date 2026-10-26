@@ -1,0 +1,87 @@
+#include "sdk_project_config.h"
+#include "osif.h"
+#include <stdint.h>
+
+#define RED_LED       (1U << 15)  /* PTD15 */
+#define SWITCH_PIN    (1U << 12)  /* PTC12 */
+
+volatile uint8_t InterruptFlag = 0U;
+volatile uint8_t BlinkMode = 0U;
+
+/* Turn red LED ON */
+void Red_LED_ON(void)
+{
+    PINS_DRV_SetPins(PTD, RED_LED);
+}
+
+/* Turn red LED OFF */
+void Red_LED_OFF(void)
+{
+    PINS_DRV_ClearPins(PTD, RED_LED);
+}
+
+int main(void)
+{
+    /* Initialize clock and GPIO pins */
+    CLOCK_DRV_Init(&clockMan1_InitConfig0);
+
+    PINS_DRV_Init(NUM_OF_CONFIGURED_PINS0,
+                  g_pin_mux_InitConfigArr0);
+
+    /* Enable PORTC interrupt */
+    INT_SYS_EnableIRQ(PORTC_IRQn);
+
+    /* LED stays ON at startup */
+    Red_LED_ON();
+
+    while (1)
+    {
+        /* Check for switch interrupt */
+        if (InterruptFlag != 0U)
+        {
+            InterruptFlag = 0U;
+            BlinkMode = 1U;
+        }
+
+        if (BlinkMode != 0U)
+        {
+            Red_LED_ON();
+            OSIF_TimeDelay(500U);
+
+            Red_LED_OFF();
+            OSIF_TimeDelay(500U);
+        }
+        else
+        {
+            /* Normal state: LED continuously ON */
+            Red_LED_ON();
+        }
+
+        while (1)
+        {
+            if ((PINS_DRV_ReadPins(PTC) & (1U << 12)) == 0U)
+            {
+                /* Switch signal is LOW */
+                PINS_DRV_SetPins(PTD, (1U << 15));
+            }
+            else
+            {
+                /* Switch signal is HIGH */
+                PINS_DRV_ClearPins(PTD, (1U << 15));
+            }
+        }
+    }
+}
+
+/* PORTC interrupt handler: Switch 1 on PTC12 */
+void PORTC_IRQHandler(void)
+{
+    if ((PINS_DRV_GetPortIntFlag(PORTC) & SWITCH_PIN) != 0U)
+    {
+        /* Clear PTC12 interrupt flag */
+        PINS_DRV_ClearPinIntFlagCmd(PORTC, 12U);
+
+        /* Notify main loop */
+        InterruptFlag = 1U;
+    }
+}
